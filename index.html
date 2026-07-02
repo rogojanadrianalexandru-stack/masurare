@@ -36,7 +36,8 @@
   #hud-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 0}
   #dist-live{background:rgba(13,17,23,.78);backdrop-filter:blur(4px);border:1px solid #2c3947;border-radius:12px;padding:10px 16px;font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--accent);min-width:130px;text-align:center}
   #dist-live small{display:block;font-size:.65rem;font-weight:400;color:var(--muted);font-family:inherit;letter-spacing:1px}
-  #btn-exit{background:rgba(13,17,23,.78);border:1px solid #2c3947;border-radius:12px;padding:10px 14px;font-size:.85rem;color:var(--ink)}
+  #btn-exit,#btn-mode{background:rgba(13,17,23,.78);border:1px solid #2c3947;border-radius:12px;padding:10px 14px;font-size:.85rem;color:var(--ink)}
+  #btn-mode.dia{border-color:var(--accent);color:var(--accent)}
 
   #hint{align-self:center;background:rgba(13,17,23,.72);border-radius:20px;padding:8px 16px;font-size:.82rem;color:var(--ink);max-width:88%;text-align:center}
 
@@ -55,7 +56,9 @@
   #list-head h2 b{color:var(--accent);font-family:var(--mono)}
   #btn-close-list{padding:8px 14px;background:var(--panel2);border-radius:10px;font-size:.85rem}
   #rows{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
-  .row{background:var(--panel);border:1px solid #26303c;border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr 86px 74px 34px;gap:8px;align-items:center}
+  .row{background:var(--panel);border:1px solid #26303c;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .row .r1{display:grid;grid-template-columns:1fr 86px 34px;gap:8px;align-items:center}
+  .row .r2{display:grid;grid-template-columns:1fr 1fr 70px;gap:8px;align-items:center}
   .row input{background:var(--panel2);border:1px solid #2c3947;border-radius:8px;padding:8px;width:100%;font-size:.85rem}
   .row input.len{font-family:var(--mono);color:var(--ok);font-weight:700;font-size:.9rem;text-align:right}
   .row input.toli{font-family:var(--mono);text-align:center}
@@ -84,7 +87,8 @@
 <div id="overlay">
   <div id="hud-top">
     <div id="dist-live">— <small>METRI</small></div>
-    <button id="btn-exit">✕ Ieși</button>
+    <button id="btn-mode">📏 Lungime</button>
+    <button id="btn-exit">✕</button>
   </div>
   <div id="hint">Mișcă telefonul ușor până apare cercul portocaliu pe suprafață</div>
   <div id="hud-bottom">
@@ -100,7 +104,6 @@
     <h2>Măsurători <b id="count-list">0</b></h2>
     <button id="btn-close-list">Închide</button>
   </div>
-  <div class="row-labels"><span>Nume</span><span style="text-align:right">Lungime</span><span style="text-align:center">Țoli</span><span></span></div>
   <div id="rows"></div>
   <div id="list-actions">
     <button id="btn-csv">⬇ Export CSV</button>
@@ -143,23 +146,27 @@
     items.forEach(function(it, i){
       var row = document.createElement('div');
       row.className = 'row';
-      var name = document.createElement('input');
-      name.value = it.nume;
-      name.oninput = function(){ it.nume = name.value; save(); };
+      var r1 = document.createElement('div'); r1.className='r1';
+      var r2 = document.createElement('div'); r2.className='r2';
+
+      function inp(cls, ph, val, onin){
+        var e = document.createElement('input');
+        if(cls) e.className = cls;
+        e.placeholder = ph;
+        e.value = val || '';
+        e.oninput = onin;
+        return e;
+      }
+      var name = inp('', 'Nume', it.nume, function(){ it.nume = name.value; save(); });
       var len = document.createElement('input');
       len.className = 'len';
       len.inputMode = 'decimal';
       len.value = it.lungime.toFixed(2).replace('.',',');
       len.onchange = function(){
         var v = parseFloat(len.value.replace(',','.'));
-        if(!isNaN(v) && v > 0){ it.lungime = v; save(); }
+        if(!isNaN(v) && v >= 0){ it.lungime = v; save(); }
         len.value = it.lungime.toFixed(2).replace('.',',');
       };
-      var toli = document.createElement('input');
-      toli.className = 'toli';
-      toli.placeholder = '—';
-      toli.value = it.toli || '';
-      toli.oninput = function(){ it.toli = toli.value; save(); };
       var del = document.createElement('button');
       del.className = 'del';
       del.textContent = '✕';
@@ -168,7 +175,13 @@
           items.splice(i,1); save(); renderList();
         }
       };
-      row.appendChild(name); row.appendChild(len); row.appendChild(toli); row.appendChild(del);
+      var spool = inp('', 'Spool nr', it.spool, function(){ it.spool = spool.value; save(); });
+      var izo = inp('', 'Izometrie', it.izo, function(){ it.izo = izo.value; save(); });
+      var toli = inp('toli', 'Țoli', it.toli, function(){ it.toli = toli.value; save(); });
+
+      r1.appendChild(name); r1.appendChild(len); r1.appendChild(del);
+      r2.appendChild(spool); r2.appendChild(izo); r2.appendChild(toli);
+      row.appendChild(r1); row.appendChild(r2);
       rows.appendChild(row);
     });
     updateCounts();
@@ -185,9 +198,12 @@
   };
 
   $('btn-csv').onclick = function(){
-    var lines = ['nume;lungime_m;toli'];
+    var lines = ['nume;lungime_m;toli;spool;izometrie;diametru_masurat_mm'];
     items.forEach(function(it){
-      lines.push('"' + it.nume.replace(/"/g,'""') + '";' + it.lungime.toFixed(3).replace('.',',') + ';"' + (it.toli||'').replace(/"/g,'""') + '"');
+      function q(s){ return '"' + String(s||'').replace(/"/g,'""') + '"'; }
+      lines.push([q(it.nume), it.lungime.toFixed(3).replace('.',','), q(it.toli),
+                  q(it.spool), q(it.izo),
+                  it.diam_mm ? String(Math.round(it.diam_mm)) : ''].join(';'));
     });
     var blob = new Blob(['\uFEFF' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
     var a = document.createElement('a');
@@ -284,6 +300,33 @@
   }
 
   function setHint(t){ elHint.textContent = t; }
+
+  /* ---- moduri de măsurare ---- */
+  var mode = 'len';  // 'len' = lungime, 'dia' = diametru
+  // diametre exterioare standard (NPS -> mm)
+  var NPS = [['½"',21.3],['¾"',26.7],['1"',33.4],['1¼"',42.2],['1½"',48.3],
+             ['2"',60.3],['2½"',73.0],['3"',88.9],['4"',114.3],['5"',141.3],
+             ['6"',168.3],['8"',219.1],['10"',273.1],['12"',323.9],['14"',355.6],
+             ['16"',406.4],['18"',457.2],['20"',508.0],['24"',609.6]];
+  function nearestNPS(mm){
+    var best = NPS[0], bd = Math.abs(mm - NPS[0][1]);
+    NPS.forEach(function(n){
+      var d = Math.abs(mm - n[1]);
+      if(d < bd){ bd = d; best = n; }
+    });
+    return { label: best[0], od: best[1], diff: mm - best[1] };
+  }
+  $('btn-mode').onclick = function(){
+    mode = (mode === 'len') ? 'dia' : 'len';
+    var b = $('btn-mode');
+    b.textContent = (mode === 'len') ? '📏 Lungime' : '⌀ Diametru';
+    b.classList.toggle('dia', mode === 'dia');
+    resetCurrent();
+    setHint(mode === 'len'
+      ? 'Mod LUNGIME: marchează cele două capete ale conductei'
+      : 'Mod DIAMETRU: marchează marginea stângă apoi marginea dreaptă a țevii — se completează țolii la ultima măsurătoare');
+  };
+
   function setDist(m){
     elDist.innerHTML = (m===null ? '—' : m.toFixed(2).replace('.',',')) + ' <small>METRI</small>';
   }
@@ -312,12 +355,15 @@
       liveLine = new THREE.Line(liveGeom, new THREE.LineBasicMaterial({color:0xff8c1a, linewidth:3}));
       scene.add(liveLine);
       elMark.classList.add('armed');
-      elMark.textContent = 'CAPĂT 2';
-      setHint('Acum țintește celălalt capăt al conductei și apasă din nou');
+      elMark.textContent = (mode === 'dia') ? 'MARGINE 2' : 'CAPĂT 2';
+      setHint(mode === 'dia'
+        ? 'Acum țintește marginea opusă a țevii și apasă din nou'
+        : 'Acum țintește celălalt capăt al conductei și apasă din nou');
       if(navigator.vibrate) navigator.vibrate(30);
     } else {
       var d = pointA.distanceTo(p);
-      if(d < 0.02){ setHint('Punctele sunt prea aproape — țintește celălalt capăt'); return; }
+      var minD = (mode === 'dia') ? 0.008 : 0.02;
+      if(d < minD){ setHint('Punctele sunt prea aproape — încearcă din nou'); return; }
       // păstrează linia + capetele în verde
       var g = new THREE.BufferGeometry().setFromPoints([pointA, p]);
       var doneLine = new THREE.Line(g, new THREE.LineBasicMaterial({color:0x3ddc84}));
@@ -326,11 +372,30 @@
       if(markerA){ scene.remove(markerA); markerA = null; }
       kept.push(doneLine, sA, sB);
 
-      items.push({ nume:'Conducta ' + (items.length+1), lungime:d, toli:'', data:new Date().toISOString() });
-      save(); updateCounts();
-      setDist(d);
-      setHint('Salvat: ' + fmt(d) + ' ✓ — poți marca următoarea conductă');
-      if(navigator.vibrate) navigator.vibrate([40,60,40]);
+      if(mode === 'dia'){
+        var mm = d * 1000;
+        var n = nearestNPS(mm);
+        var target;
+        if(items.length){
+          target = items[items.length - 1];
+        } else {
+          target = { nume:'Țeavă 1 (doar Ø)', lungime:0, toli:'', data:new Date().toISOString() };
+          items.push(target);
+        }
+        target.diam_mm = mm;
+        target.toli = n.label;
+        save(); updateCounts();
+        var diffTxt = (n.diff >= 0 ? '+' : '') + n.diff.toFixed(0) + ' mm';
+        setDist(d);
+        setHint('Ø ' + mm.toFixed(0) + ' mm → ' + n.label + ' (dif. ' + diffTxt + ') salvat la „' + target.nume + '" — verifică în listă');
+        if(navigator.vibrate) navigator.vibrate([40,60,40]);
+      } else {
+        items.push({ nume:'Conducta ' + (items.length+1), lungime:d, toli:'', data:new Date().toISOString() });
+        save(); updateCounts();
+        setDist(d);
+        setHint('Salvat: ' + fmt(d) + ' ✓ — poți marca următoarea conductă');
+        if(navigator.vibrate) navigator.vibrate([40,60,40]);
+      }
 
       if(liveLine){ scene.remove(liveLine); liveLine=null; liveGeom=null; }
       pointA = null;
