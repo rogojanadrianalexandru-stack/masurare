@@ -57,7 +57,7 @@
   #rows{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
   .row{background:var(--panel);border:1px solid #26303c;border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr 86px 74px 34px;gap:8px;align-items:center}
   .row input{background:var(--panel2);border:1px solid #2c3947;border-radius:8px;padding:8px;width:100%;font-size:.85rem}
-  .row .len{font-family:var(--mono);color:var(--ok);font-weight:700;font-size:.9rem;text-align:right}
+  .row input.len{font-family:var(--mono);color:var(--ok);font-weight:700;font-size:.9rem;text-align:right}
   .row input.toli{font-family:var(--mono);text-align:center}
   .row .del{color:var(--danger);font-size:1.05rem;text-align:center}
   .row-labels{display:grid;grid-template-columns:1fr 86px 74px 34px;gap:8px;padding:2px 24px 2px 24px;font-size:.68rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
@@ -146,9 +146,15 @@
       var name = document.createElement('input');
       name.value = it.nume;
       name.oninput = function(){ it.nume = name.value; save(); };
-      var len = document.createElement('div');
+      var len = document.createElement('input');
       len.className = 'len';
-      len.textContent = fmt(it.lungime);
+      len.inputMode = 'decimal';
+      len.value = it.lungime.toFixed(2).replace('.',',');
+      len.onchange = function(){
+        var v = parseFloat(len.value.replace(',','.'));
+        if(!isNaN(v) && v > 0){ it.lungime = v; save(); }
+        len.value = it.lungime.toFixed(2).replace('.',',');
+      };
       var toli = document.createElement('input');
       toli.className = 'toli';
       toli.placeholder = '—';
@@ -259,6 +265,24 @@
     return v;
   }
 
+  /* stabilizare: mediem ultimele cadre pentru precizie */
+  var posBuffer = [];
+  var BUF_MAX = 12;
+  function pushPos(p){
+    posBuffer.push(p.clone());
+    if(posBuffer.length > BUF_MAX) posBuffer.shift();
+  }
+  function stablePos(){
+    if(posBuffer.length < 6) return null;           // prea puține cadre
+    var avg = new THREE.Vector3();
+    posBuffer.forEach(function(p){ avg.add(p); });
+    avg.divideScalar(posBuffer.length);
+    var spread = 0;
+    posBuffer.forEach(function(p){ spread = Math.max(spread, p.distanceTo(avg)); });
+    if(spread > 0.015) return null;                 // tremur > 1,5 cm
+    return avg;
+  }
+
   function setHint(t){ elHint.textContent = t; }
   function setDist(m){
     elDist.innerHTML = (m===null ? '—' : m.toFixed(2).replace('.',',')) + ' <small>METRI</small>';
@@ -275,7 +299,12 @@
 
   function mark(){
     if(!reticle.visible){ setHint('Nu văd suprafața — apropie-te și mișcă telefonul ușor'); return; }
-    var p = reticlePos();
+    var p = stablePos();
+    if(!p){
+      setHint('⏸ Ține telefonul NEMIȘCAT o secundă și apasă din nou');
+      if(navigator.vibrate) navigator.vibrate([20,40,20]);
+      return;
+    }
     if(!pointA){
       pointA = p;
       markerA = sphere(p, 0xff8c1a);
@@ -323,10 +352,17 @@
   btnStart.addEventListener('click', function(){
     if(!renderer) initThree();
     navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test', 'dom-overlay'],
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay'],
       domOverlay: { root: $('overlay') }
     }).then(onSession).catch(function(err){
-      unsupported('Nu pot porni AR: ' + err.message);
+      // fallback: încearcă fără niciun feature opțional
+      navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test']
+      }).then(onSession).catch(function(err2){
+        unsupported('Nu pot porni AR.\nEroare 1: ' + err.message + '\nEroare 2: ' + err2.message);
+        alert('Eroare AR:\n' + err.message);
+      });
     });
   });
 
@@ -363,8 +399,10 @@
           var pose = hits[0].getPose(refSpace);
           reticle.visible = true;
           reticle.matrix.fromArray(pose.transform.matrix);
+          pushPos(reticlePos());
         } else {
           reticle.visible = false;
+          posBuffer.length = 0;
         }
       }
       // linie + distanță live
