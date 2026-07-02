@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<title>Măsurare Conducte AR</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161d26; --panel2:#1f2937;
+    --ink:#e8edf3; --muted:#8b98a8;
+    --accent:#ff8c1a; --ok:#3ddc84; --danger:#ff5d5d;
+    --mono:'Roboto Mono',ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;overflow:hidden}
+  button{font:inherit;border:0;cursor:pointer;color:inherit;background:none}
+  input{font:inherit;color:inherit}
+
+  /* ---------- ecran start ---------- */
+  #start{position:fixed;inset:0;display:flex;flex-direction:column;padding:22px 18px;gap:14px;overflow-y:auto;background:var(--bg)}
+  #start h1{font-size:1.35rem;letter-spacing:.5px}
+  #start h1 span{color:var(--accent)}
+  #start p.sub{color:var(--muted);font-size:.9rem;line-height:1.45}
+  #btn-start{background:var(--accent);color:#14100a;font-weight:700;font-size:1.05rem;padding:16px;border-radius:12px;width:100%}
+  #btn-start:disabled{background:#3a4552;color:var(--muted)}
+  #support-msg{font-size:.85rem;color:var(--danger);line-height:1.4;display:none}
+
+  /* ---------- overlay AR ---------- */
+  #overlay{position:fixed;inset:0;display:none;flex-direction:column;justify-content:space-between;pointer-events:none}
+  body.in-ar #overlay{display:flex}
+  body.in-ar #start{display:none}
+  #overlay > *{pointer-events:auto}
+
+  #hud-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 0}
+  #dist-live{background:rgba(13,17,23,.78);backdrop-filter:blur(4px);border:1px solid #2c3947;border-radius:12px;padding:10px 16px;font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--accent);min-width:130px;text-align:center}
+  #dist-live small{display:block;font-size:.65rem;font-weight:400;color:var(--muted);font-family:inherit;letter-spacing:1px}
+  #btn-exit{background:rgba(13,17,23,.78);border:1px solid #2c3947;border-radius:12px;padding:10px 14px;font-size:.85rem;color:var(--ink)}
+
+  #hint{align-self:center;background:rgba(13,17,23,.72);border-radius:20px;padding:8px 16px;font-size:.82rem;color:var(--ink);max-width:88%;text-align:center}
+
+  #hud-bottom{display:flex;align-items:flex-end;justify-content:center;gap:14px;padding:0 14px 26px}
+  .side-btn{background:rgba(13,17,23,.78);border:1px solid #2c3947;border-radius:14px;padding:12px;font-size:.78rem;min-width:74px;text-align:center;color:var(--ink)}
+  .side-btn .n{display:block;font-family:var(--mono);font-size:1.05rem;color:var(--accent);font-weight:700}
+  #btn-mark{width:86px;height:86px;border-radius:50%;background:var(--accent);color:#14100a;font-weight:800;font-size:.8rem;box-shadow:0 0 0 6px rgba(255,140,26,.25);letter-spacing:.5px}
+  #btn-mark:active{transform:scale(.94)}
+  #btn-mark.armed{background:var(--ok);box-shadow:0 0 0 6px rgba(61,220,132,.25)}
+
+  /* ---------- panou listă ---------- */
+  #list-panel{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:30}
+  #list-panel.open{display:flex}
+  #list-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px}
+  #list-head h2{font-size:1.05rem}
+  #list-head h2 b{color:var(--accent);font-family:var(--mono)}
+  #btn-close-list{padding:8px 14px;background:var(--panel2);border-radius:10px;font-size:.85rem}
+  #rows{flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+  .row{background:var(--panel);border:1px solid #26303c;border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr 86px 74px 34px;gap:8px;align-items:center}
+  .row input{background:var(--panel2);border:1px solid #2c3947;border-radius:8px;padding:8px;width:100%;font-size:.85rem}
+  .row .len{font-family:var(--mono);color:var(--ok);font-weight:700;font-size:.9rem;text-align:right}
+  .row input.toli{font-family:var(--mono);text-align:center}
+  .row .del{color:var(--danger);font-size:1.05rem;text-align:center}
+  .row-labels{display:grid;grid-template-columns:1fr 86px 74px 34px;gap:8px;padding:2px 24px 2px 24px;font-size:.68rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+  #list-actions{display:flex;gap:10px;padding:12px 16px 20px;border-top:1px solid #222b36}
+  #list-actions button{flex:1;padding:14px;border-radius:12px;font-weight:700;font-size:.9rem}
+  #btn-csv{background:var(--accent);color:#14100a}
+  #btn-wipe{background:var(--panel2);color:var(--danger)}
+  .empty{color:var(--muted);text-align:center;padding:40px 20px;font-size:.9rem;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- ecran start -->
+<div id="start">
+  <h1>Măsurare <span>Conducte</span> AR</h1>
+  <p class="sub">Ținește punctul din centrul ecranului pe un capăt al conductei, apasă <b>MARCHEAZĂ</b>, apoi pe celălalt capăt și apasă din nou. Măsurătoarea se salvează automat. Țolii îi completezi în listă.</p>
+  <button id="btn-start">▶ Pornește camera AR</button>
+  <button id="btn-open-list" class="side-btn" style="width:100%;padding:14px">📋 Vezi lista de măsurători <span class="n" id="count-start">0</span></button>
+  <p id="support-msg"></p>
+  <p class="sub" style="margin-top:auto;font-size:.75rem">Sfaturi: mișcă telefonul lent stânga-dreapta la pornire ca să detecteze suprafețele • lumină bună = precizie mai bună • stai la 0,5–2 m de conductă • precizie tipică ±1–3 cm.</p>
+</div>
+
+<!-- overlay AR (dom-overlay root) -->
+<div id="overlay">
+  <div id="hud-top">
+    <div id="dist-live">— <small>METRI</small></div>
+    <button id="btn-exit">✕ Ieși</button>
+  </div>
+  <div id="hint">Mișcă telefonul ușor până apare cercul portocaliu pe suprafață</div>
+  <div id="hud-bottom">
+    <button id="btn-undo" class="side-btn">↩ Anulează<br>punct</button>
+    <button id="btn-mark">MARCHEAZĂ</button>
+    <button id="btn-list" class="side-btn">📋 Listă<span class="n" id="count-ar">0</span></button>
+  </div>
+</div>
+
+<!-- panou listă -->
+<div id="list-panel">
+  <div id="list-head">
+    <h2>Măsurători <b id="count-list">0</b></h2>
+    <button id="btn-close-list">Închide</button>
+  </div>
+  <div class="row-labels"><span>Nume</span><span style="text-align:right">Lungime</span><span style="text-align:center">Țoli</span><span></span></div>
+  <div id="rows"></div>
+  <div id="list-actions">
+    <button id="btn-csv">⬇ Export CSV</button>
+    <button id="btn-wipe">Șterge tot</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  'use strict';
+  var STORE_KEY = 'masuratori_conducte_v1';
+
+  /* ---------------- date ---------------- */
+  function load(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }catch(e){ return []; } }
+  function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(items)); }
+  var items = load();
+
+  /* ---------------- UI referințe ---------------- */
+  var $ = function(id){ return document.getElementById(id); };
+  var elDist=$('dist-live'), elHint=$('hint'), elMark=$('btn-mark');
+
+  function updateCounts(){
+    var n = String(items.length);
+    $('count-start').textContent = n;
+    $('count-ar').textContent = n;
+    $('count-list').textContent = n;
+  }
+
+  /* ---------------- listă ---------------- */
+  function fmt(m){ return m.toFixed(2).replace('.',',') + ' m'; }
+
+  function renderList(){
+    var rows = $('rows');
+    rows.innerHTML = '';
+    if(!items.length){
+      rows.innerHTML = '<div class="empty">Nicio măsurătoare încă.<br>Pornește AR și marchează două puncte pe o conductă.</div>';
+      updateCounts(); return;
+    }
+    items.forEach(function(it, i){
+      var row = document.createElement('div');
+      row.className = 'row';
+      var name = document.createElement('input');
+      name.value = it.nume;
+      name.oninput = function(){ it.nume = name.value; save(); };
+      var len = document.createElement('div');
+      len.className = 'len';
+      len.textContent = fmt(it.lungime);
+      var toli = document.createElement('input');
+      toli.className = 'toli';
+      toli.placeholder = '—';
+      toli.value = it.toli || '';
+      toli.oninput = function(){ it.toli = toli.value; save(); };
+      var del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.onclick = function(){
+        if(confirm('Ștergi "' + it.nume + '"?')){
+          items.splice(i,1); save(); renderList();
+        }
+      };
+      row.appendChild(name); row.appendChild(len); row.appendChild(toli); row.appendChild(del);
+      rows.appendChild(row);
+    });
+    updateCounts();
+  }
+
+  $('btn-open-list').onclick = function(){ renderList(); $('list-panel').classList.add('open'); };
+  $('btn-list').onclick = function(){ renderList(); $('list-panel').classList.add('open'); };
+  $('btn-close-list').onclick = function(){ $('list-panel').classList.remove('open'); };
+
+  $('btn-wipe').onclick = function(){
+    if(items.length && confirm('Ștergi TOATE cele ' + items.length + ' măsurători? Nu se poate anula.')){
+      items = []; save(); renderList();
+    }
+  };
+
+  $('btn-csv').onclick = function(){
+    var lines = ['nume;lungime_m;toli'];
+    items.forEach(function(it){
+      lines.push('"' + it.nume.replace(/"/g,'""') + '";' + it.lungime.toFixed(3).replace('.',',') + ';"' + (it.toli||'').replace(/"/g,'""') + '"');
+    });
+    var blob = new Blob(['\uFEFF' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'masuratori_conducte.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  };
+
+  /* ---------------- verificare suport ---------------- */
+  var btnStart = $('btn-start');
+  function unsupported(msg){
+    btnStart.disabled = true;
+    var el = $('support-msg');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+  if(!('xr' in navigator)){
+    unsupported('Telefonul/browserul nu suportă WebXR. Deschide pagina în Chrome pe Android și verifică dacă ai instalat „Google Play Services for AR" (ARCore) din Play Store. Pagina trebuie servită prin HTTPS.');
+  } else {
+    navigator.xr.isSessionSupported('immersive-ar').then(function(ok){
+      if(!ok) unsupported('AR nu e disponibil pe acest dispozitiv. Instalează/actualizează „Google Play Services for AR" din Play Store și folosește Chrome.');
+    }).catch(function(){ unsupported('Nu pot verifica suportul AR. Asigură-te că pagina e pe HTTPS și folosești Chrome pe Android.'); });
+  }
+
+  /* ---------------- Three.js + WebXR ---------------- */
+  var renderer, scene, camera, reticle, session=null, hitTestSource=null, viewerSpace=null, refSpace=null;
+  var pointA = null;           // THREE.Vector3 sau null
+  var liveLine = null, liveGeom = null;
+  var markerA = null;
+  var kept = [];               // obiecte 3D ale măsurătorilor salvate
+
+  function initThree(){
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 40);
+    renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    var light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+    scene.add(light);
+
+    // reticul: inel + punct central
+    var ring = new THREE.RingGeometry(0.035, 0.045, 40);
+    ring.rotateX(-Math.PI/2);
+    var dot = new THREE.CircleGeometry(0.006, 20);
+    dot.rotateX(-Math.PI/2);
+    reticle = new THREE.Group();
+    reticle.add(new THREE.Mesh(ring, new THREE.MeshBasicMaterial({color:0xff8c1a})));
+    reticle.add(new THREE.Mesh(dot,  new THREE.MeshBasicMaterial({color:0xff8c1a})));
+    reticle.matrixAutoUpdate = false;
+    reticle.visible = false;
+    scene.add(reticle);
+
+    window.addEventListener('resize', function(){
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  }
+
+  function sphere(pos, color){
+    var m = new THREE.Mesh(new THREE.SphereGeometry(0.012, 16, 12),
+                           new THREE.MeshBasicMaterial({color:color}));
+    m.position.copy(pos);
+    scene.add(m);
+    return m;
+  }
+
+  function reticlePos(){
+    var v = new THREE.Vector3();
+    v.setFromMatrixPosition(reticle.matrix);
+    return v;
+  }
+
+  function setHint(t){ elHint.textContent = t; }
+  function setDist(m){
+    elDist.innerHTML = (m===null ? '—' : m.toFixed(2).replace('.',',')) + ' <small>METRI</small>';
+  }
+
+  function resetCurrent(){
+    pointA = null;
+    if(markerA){ scene.remove(markerA); markerA = null; }
+    if(liveLine){ scene.remove(liveLine); liveLine = null; liveGeom = null; }
+    elMark.classList.remove('armed');
+    elMark.textContent = 'MARCHEAZĂ';
+    setDist(null);
+  }
+
+  function mark(){
+    if(!reticle.visible){ setHint('Nu văd suprafața — apropie-te și mișcă telefonul ușor'); return; }
+    var p = reticlePos();
+    if(!pointA){
+      pointA = p;
+      markerA = sphere(p, 0xff8c1a);
+      liveGeom = new THREE.BufferGeometry().setFromPoints([pointA, pointA]);
+      liveLine = new THREE.Line(liveGeom, new THREE.LineBasicMaterial({color:0xff8c1a, linewidth:3}));
+      scene.add(liveLine);
+      elMark.classList.add('armed');
+      elMark.textContent = 'CAPĂT 2';
+      setHint('Acum țintește celălalt capăt al conductei și apasă din nou');
+      if(navigator.vibrate) navigator.vibrate(30);
+    } else {
+      var d = pointA.distanceTo(p);
+      if(d < 0.02){ setHint('Punctele sunt prea aproape — țintește celălalt capăt'); return; }
+      // păstrează linia + capetele în verde
+      var g = new THREE.BufferGeometry().setFromPoints([pointA, p]);
+      var doneLine = new THREE.Line(g, new THREE.LineBasicMaterial({color:0x3ddc84}));
+      scene.add(doneLine);
+      var sA = sphere(pointA, 0x3ddc84), sB = sphere(p, 0x3ddc84);
+      if(markerA){ scene.remove(markerA); markerA = null; }
+      kept.push(doneLine, sA, sB);
+
+      items.push({ nume:'Conducta ' + (items.length+1), lungime:d, toli:'', data:new Date().toISOString() });
+      save(); updateCounts();
+      setDist(d);
+      setHint('Salvat: ' + fmt(d) + ' ✓ — poți marca următoarea conductă');
+      if(navigator.vibrate) navigator.vibrate([40,60,40]);
+
+      if(liveLine){ scene.remove(liveLine); liveLine=null; liveGeom=null; }
+      pointA = null;
+      elMark.classList.remove('armed');
+      elMark.textContent = 'MARCHEAZĂ';
+    }
+  }
+
+  elMark.addEventListener('click', mark);
+  $('btn-undo').addEventListener('click', function(){
+    if(pointA){ resetCurrent(); setHint('Punct anulat — țintește din nou primul capăt'); }
+  });
+  $('btn-exit').addEventListener('click', function(){ if(session) session.end(); });
+
+  // nu lăsa atingerile pe UI să genereze evenimente XR select
+  $('overlay').addEventListener('beforexrselect', function(e){ e.preventDefault(); });
+
+  /* ---------------- sesiune AR ---------------- */
+  btnStart.addEventListener('click', function(){
+    if(!renderer) initThree();
+    navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test', 'dom-overlay'],
+      domOverlay: { root: $('overlay') }
+    }).then(onSession).catch(function(err){
+      unsupported('Nu pot porni AR: ' + err.message);
+    });
+  });
+
+  function onSession(s){
+    session = s;
+    document.body.classList.add('in-ar');
+    setHint('Mișcă telefonul ușor până apare cercul portocaliu pe suprafață');
+    setDist(null);
+    updateCounts();
+
+    renderer.xr.setReferenceSpaceType('local');
+    renderer.xr.setSession(session);
+
+    session.requestReferenceSpace('viewer').then(function(vs){
+      viewerSpace = vs;
+      return session.requestHitTestSource({space: viewerSpace});
+    }).then(function(src){ hitTestSource = src; });
+
+    session.addEventListener('end', function(){
+      document.body.classList.remove('in-ar');
+      hitTestSource = null; session = null;
+      resetCurrent();
+      // curăță scena de măsurătorile vechi
+      kept.forEach(function(o){ scene.remove(o); });
+      kept = [];
+      renderer.setAnimationLoop(null);
+    });
+
+    renderer.setAnimationLoop(function(t, frame){
+      if(frame && hitTestSource){
+        if(!refSpace) refSpace = renderer.xr.getReferenceSpace();
+        var hits = frame.getHitTestResults(hitTestSource);
+        if(hits.length){
+          var pose = hits[0].getPose(refSpace);
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+        } else {
+          reticle.visible = false;
+        }
+      }
+      // linie + distanță live
+      if(pointA && reticle.visible && liveGeom){
+        var p = reticlePos();
+        var arr = liveGeom.attributes.position.array;
+        arr[3]=p.x; arr[4]=p.y; arr[5]=p.z;
+        liveGeom.attributes.position.needsUpdate = true;
+        setDist(pointA.distanceTo(p));
+      }
+      renderer.render(scene, camera);
+    });
+  }
+
+  updateCounts();
+})();
+</script>
+</body>
+</html>
